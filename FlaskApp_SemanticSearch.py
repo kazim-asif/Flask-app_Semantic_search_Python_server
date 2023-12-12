@@ -15,7 +15,7 @@ collection = chroma_client.get_or_create_collection(
 def readCSVAndGetDocs():
     
     # Read the CSV file into a DataFrame
-    selected_data = pd.read_csv('FYP/products_data/cleaned_data.csv')
+    selected_data = pd.read_csv('FYP/products_data/AllProductswithuid.csv')
     subset_data = selected_data.head(50)
     documents = subset_data['name'].tolist() # Extract only the "name" field from the DataFrame
     return documents
@@ -38,6 +38,18 @@ def addDocsToCollection():
             documents = documents,
             ids = ids
         )
+        
+def addDocsFromCsv():
+    
+    # Read the CSV file into a DataFrame
+    selected_data = pd.read_csv('FYP/products_data/AllProductswithuid.csv')
+    subset_data = selected_data.head(50)
+    documents = subset_data['name'].tolist() # Extract only the "name" field from the DataFrame
+    ids = subset_data['uid'].tolist()
+    collection.add(
+        documents = documents,
+        ids = ids
+    )
 
 
 app = Flask(__name__)
@@ -45,31 +57,38 @@ app = Flask(__name__)
 @app.route('/add', methods=['POST'])
 def receive_data():
     product = request.json
-    product_id = product.get('id')
+    product_id = product.get('uid')
     product_name = product.get('name')
     
     # add product to vector db
     collection.add(
         documents = [product_name],
-        ids = product_id
+        ids = [product_id]
     )
-    
     return jsonify({"message": "Data added successfully"})
+
 
 @app.route('/search', methods=['GET'])
 def get_data():
     # Access query parameters using request.args
     search_query = request.args.get('prod', '')
-    
-    results = collection.query(
-        query_texts = [search_query],
-        n_results=2
-    )
-    
-    sample_data = {"products": results['ids'][0]}
+    if search_query:
+        results = collection.query(
+            query_texts = [search_query],
+            #n_results=2
+        )
+        
+        results = results['ids'][0]
+    else:
+        results = collection.get()
+        results = results['ids']
+        
+    sample_data = {"products": results}
     return jsonify(sample_data)
 
 if __name__ == '__main__':
-    addDocsToCollection()
+    if collection.count()<=0:
+        addDocsFromCsv()
     app.run(port=5000)  # Choose any available port
+
 
