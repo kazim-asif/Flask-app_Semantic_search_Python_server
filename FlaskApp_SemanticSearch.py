@@ -1,10 +1,12 @@
 # -*- coding: utf-8 -*-
 
-
+from flask_cors import CORS
 from flask import Flask, request, jsonify
 import pandas as pd
 import chromadb
 from chromadb.utils import embedding_functions
+import requests
+from googletrans import Translator
 
 chroma_client = chromadb.PersistentClient('FYP/chromadb')
 collection = chroma_client.get_or_create_collection(
@@ -43,13 +45,26 @@ def addDocsFromCsv():
     
     # Read the CSV file into a DataFrame
     selected_data = pd.read_csv('FYP/products_data/AllProductswithuid.csv')
-    subset_data = selected_data.head(50)
-    documents = subset_data['name'].tolist() # Extract only the "name" field from the DataFrame
-    ids = subset_data['uid'].tolist()
-    collection.add(
-        documents = documents,
-        ids = ids
-    )
+    #subset_data = selected_data.head(50)
+    
+    # Set the batch size (number of rows to add in each iteration)
+    batch_size = 500
+    
+    # Iterate over every alternate batch of 500 rows and add documents
+    for i in range(0, len(selected_data), batch_size * 2):
+        batch_data = selected_data.iloc[i:i + batch_size]
+        
+        documents = batch_data['name'].tolist() #getting name column from csv
+        ids = batch_data['uid'].tolist() #getting uid column from csv
+        
+        #adding to db collecction
+        collection.add(documents=documents, ids=ids)
+    
+    """# Iterate over rows and add documents one by one
+    for index, row in selected_data.iterrows():
+        document = row['name']
+        uid = row['uid']
+        collection.add(documents=[document], ids=[uid])"""
 
 
 app = Flask(__name__)
@@ -67,7 +82,19 @@ def receive_data():
     )
     return jsonify({"message": "Data added successfully"})
 
+@app.route('/update', methods=['PUT'])
+def update_data():
+    product = request.json
+    product_id = product.get('uid')
+    product_name = product.get('name')
+    # add product to vector db
+    collection.update(
+        documents = [product_name],
+        ids = [product_id]
+    )
+    return jsonify({"message": "Data updated successfully"})
 
+# search in database
 @app.route('/search', methods=['GET'])
 def get_data():
     # Access query parameters using request.args
@@ -86,9 +113,60 @@ def get_data():
     sample_data = {"products": results}
     return jsonify(sample_data)
 
+
+#delete record from database
+@app.route('/delete/<int:item_id>', methods=['DELETE'])
+def delete_item(item_id):
+    item_id = str(item_id) # Convert item_id to a string
+    if collection.get(ids=[item_id]):
+        collection.delete(ids=[item_id])
+    return jsonify({"message": "Data deleted successfully"})
+
+def translate_to_english(text):
+    if text:
+        translator = Translator()
+        translation = translator.translate(text, src='ur', dest='en')
+        return translation.text
+    else:
+        return "No text to translate"
+
+def process_audio(data):
+    
+    API_URL = "https://api-inference.huggingface.co/models/kazimAsif/whisper-STT-small-ur"
+    headers = {"Authorization": "Bearer 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"}
+    
+    response = requests.post(API_URL, headers=headers, data=data)
+    transcribed_data = response.json()
+
+    # Extract the 'text' key from the transcribed_data dictionary
+    transcribed_text = transcribed_data.get('text', '')
+
+    # Translate the transcribed text to English
+    translated_text = translate_to_english(transcribed_text)
+    return translated_text
+
+
+@app.route('/audio/', methods=['POST'])
+def getAudio():
+    
+    try:
+        # Get the audio file
+        audio_file = request.files['audio']
+        
+        # Read the file content into memory
+        data = audio_file.read()
+
+        # Process the audio file
+        result = process_audio(data)
+
+        return jsonify({"text":result})
+    except Exception as e:
+        return jsonify({"error": str(e)})
+
+
 if __name__ == '__main__':
     if collection.count()<=0:
         addDocsFromCsv()
+    print(collection.count())
+    CORS(app) # enable Cross-Origin Resource Sharing
     app.run(port=5000)  # Choose any available port
-
-
