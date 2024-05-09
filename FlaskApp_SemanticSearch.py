@@ -2,6 +2,7 @@
 
 from flask_cors import CORS
 from flask import Flask, request, jsonify
+import requests
 import pandas as pd
 import chromadb
 from chromadb.utils import embedding_functions
@@ -102,9 +103,8 @@ def get_data():
     if search_query:
         results = collection.query(
             query_texts = [search_query],
-            #n_results=2
+            n_results=80
         )
-        
         results = results['ids'][0]
     else:
         results = collection.get()
@@ -162,11 +162,46 @@ def getAudio():
         return jsonify({"text":result})
     except Exception as e:
         return jsonify({"error": str(e)})
+    
+
+def createDescription(prompt):
+    API_URL = "https://api-inference.huggingface.co/models/mindthebridge/short-description-generator-6k"
+    headers = {"Authorization": "Bearer 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"}
+    
+    payload = {
+        "inputs": prompt,
+    }
+    
+    response = requests.post(API_URL, headers=headers, json=payload)
+    # Check if the request was successful
+    if response.status_code == 200:
+        return response.json()  # Return JSON data from the response
+    else:
+        return None  # Return None if request was not successful
+
+    
+@app.route('/generateDesc/', methods=['POST'])
+def getDescription():
+    try:
+        prompt = request.form.get('data')
+        result = createDescription(prompt)
+        
+        # Check if the result is not None
+        if result is not None:
+            return jsonify({"description": result[0]['summary_text']})
+        else:
+            return jsonify({"error": "Failed to generate description"})
+    except Exception as e:
+        return jsonify({"error": str(e)})
 
 
 if __name__ == '__main__':
+    
+    CORS(app) # enable Cross-Origin Resource Sharing
+    
     if collection.count()<=0:
         addDocsFromCsv()
     print(collection.count())
-    CORS(app) # enable Cross-Origin Resource Sharing
+    
     app.run(port=5000)  # Choose any available port
+
