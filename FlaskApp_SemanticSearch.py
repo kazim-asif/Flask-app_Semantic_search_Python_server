@@ -6,10 +6,9 @@ import requests
 import pandas as pd
 import chromadb
 from chromadb.utils import embedding_functions
-import requests
 from googletrans import Translator
 
-chroma_client = chromadb.PersistentClient('FYP/chromadb')
+chroma_client = chromadb.PersistentClient('chromadb/')
 collection = chroma_client.get_or_create_collection(
         name="products",
         metadata={"hnsw:space": "cosine"} # l2 is the default
@@ -18,7 +17,7 @@ collection = chroma_client.get_or_create_collection(
 def readCSVAndGetDocs():
     
     # Read the CSV file into a DataFrame
-    selected_data = pd.read_csv('FYP/products_data/AllProductswithuid.csv')
+    selected_data = pd.read_csv('products_data/AllProductswithuid.csv')
     subset_data = selected_data.head(50)
     documents = subset_data['name'].tolist() # Extract only the "name" field from the DataFrame
     return documents
@@ -45,7 +44,7 @@ def addDocsToCollection():
 def addDocsFromCsv():
     
     # Read the CSV file into a DataFrame
-    selected_data = pd.read_csv('FYP/products_data/AllProductswithuid.csv')
+    selected_data = pd.read_csv('products_data/AllProductswithuid.csv')
     #subset_data = selected_data.head(50)
     
     # Set the batch size (number of rows to add in each iteration)
@@ -113,6 +112,10 @@ def get_data():
     sample_data = {"products": results}
     return jsonify(sample_data)
 
+
+@app.route("/", methods=["GET"])
+def base():
+    return jsonify({"message":"i am base route"})
 
 #delete record from database
 @app.route('/delete/<int:item_id>', methods=['DELETE'])
